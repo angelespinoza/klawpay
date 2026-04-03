@@ -1,14 +1,38 @@
 {
   "name": "klawpay",
   "version": "1.0.0",
-  "description": "OpenClaw plugin — payment & refund client powered by ClawRevert and OWS",
-  "module": "src/index.ts",
+  "description": "OpenClaw plugin — accept crypto payments and process refunds via ClawRevert and OWS",
+  "module": "src/entry.ts",
+  "main": "src/entry.ts",
   "type": "module",
-  "private": true,
   "scripts": {
     "dev": "bun run --watch src/index.ts",
     "start": "bun run src/index.ts",
     "pay": "bun run src/cli.ts"
+  },
+  "files": [
+    "src/",
+    "dashboard/",
+    "docs/",
+    "openclaw.plugin.json"
+  ],
+  "keywords": [
+    "openclaw",
+    "openclaw-plugin",
+    "crypto",
+    "payments",
+    "refunds",
+    "ows",
+    "xrpl",
+    "sui",
+    "solana",
+    "base"
+  ],
+  "author": "Angel Espinoza",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/angelespinoza/klawpay"
   },
   "dependencies": {
     "hono": "^4.12.10",
@@ -22,6 +46,7 @@
   },
   "openclaw": {
     "plugin": true,
+    "entry": "src/entry.ts",
     "skills": [
       "src/skills/payments.md",
       "src/skills/refunds.md"
