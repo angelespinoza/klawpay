@@ -31,67 +31,109 @@ If the client says a currency but not a chain, infer:
 - SUI → sui
 - USDC → solana or base (ask which)
 
-### Step 2 — Execute payment
+### Step 2 — Call klawpay_pay tool
 
-Call the KlawPay API:
+Call the `klawpay_pay` tool with the collected details. This will:
+1. Generate the merchant's wallet address for that chain
+2. Create a QR code the client can scan
+3. Generate a destination tag (for XRPL)
+4. Start polling the blockchain for confirmation
 
-```
-POST http://localhost:3001/pay
-Content-Type: application/json
+### Step 3 — Show payment instructions
 
-{
-  "amount": <number>,
-  "currency": "<CURRENCY>",
-  "chain": "<chain>",
-  "clientName": "<name>"
-}
-```
+Present the payment details clearly to the client. Include:
+1. The exact amount and currency to send
+2. The wallet address (formatted as code)
+3. The destination tag (if XRPL — emphasize this is required)
+4. The QR code image (show the data URL as an image)
+5. A link to view the address on the explorer
 
-### Step 3 — Show result
+**English:**
+> Please send exactly **50 XRP** to this address:
+>
+> **Address:** `rXXXXXXXXXX`
+> **Destination Tag:** `123456789` *(required for XRPL)*
+>
+> ![QR Code](data:image/png;base64,...)
+>
+> [View address on XRPL Explorer](https://testnet.xrpl.org/accounts/rXXXXXXXXXX)
+>
+> I'll confirm automatically when your payment arrives.
 
-On success, present:
-1. The transaction hash
-2. The wallet address funds were sent to
-3. A clickable explorer link
-4. The network used (testnet/devnet/mainnet)
+**Spanish:**
+> Por favor envia exactamente **50 XRP** a esta direccion:
+>
+> **Direccion:** `rXXXXXXXXXX`
+> **Etiqueta de Destino:** `123456789` *(requerida para XRPL)*
+>
+> ![Codigo QR](data:image/png;base64,...)
+>
+> [Ver direccion en XRPL Explorer](https://testnet.xrpl.org/accounts/rXXXXXXXXXX)
+>
+> Confirmare automaticamente cuando llegue tu pago.
 
-Format the response clearly:
+**Portuguese:**
+> Por favor envie exatamente **50 XRP** para este endereco:
+>
+> **Endereco:** `rXXXXXXXXXX`
+> **Tag de Destino:** `123456789` *(obrigatoria para XRPL)*
+>
+> ![Codigo QR](data:image/png;base64,...)
+>
+> [Ver endereco no XRPL Explorer](https://testnet.xrpl.org/accounts/rXXXXXXXXXX)
+>
+> Confirmarei automaticamente quando seu pagamento chegar.
+
+### Step 4 — Payment confirmation
+
+The tool automatically polls the blockchain. When payment is confirmed:
 
 **English:**
 > Payment confirmed! Here are your details:
-> - **Amount:** 50 XRP
+> - **Amount received:** 50 XRP
 > - **TX:** `ABC123...`
-> - **Explorer:** [View on XRPL Explorer](https://testnet.xrpl.org/transactions/ABC123)
-> - **Network:** testnet
+> - **From:** `rSENDER...`
+> - **Explorer:** [View transaction](https://testnet.xrpl.org/transactions/ABC123)
+>
+> Thank you for your payment!
 
 **Spanish:**
 > Pago confirmado! Aqui estan los detalles:
-> - **Monto:** 50 XRP
+> - **Monto recibido:** 50 XRP
 > - **TX:** `ABC123...`
-> - **Explorador:** [Ver en XRPL Explorer](https://testnet.xrpl.org/transactions/ABC123)
-> - **Red:** testnet
+> - **De:** `rSENDER...`
+> - **Explorador:** [Ver transaccion](https://testnet.xrpl.org/transactions/ABC123)
+>
+> Gracias por tu pago!
 
 **Portuguese:**
 > Pagamento confirmado! Aqui estao os detalhes:
-> - **Valor:** 50 XRP
+> - **Valor recebido:** 50 XRP
 > - **TX:** `ABC123...`
-> - **Explorador:** [Ver no XRPL Explorer](https://testnet.xrpl.org/transactions/ABC123)
-> - **Rede:** testnet
+> - **De:** `rSENDER...`
+> - **Explorador:** [Ver transacao](https://testnet.xrpl.org/transactions/ABC123)
+>
+> Obrigado pelo seu pagamento!
 
-### Step 4 — Error handling
+If payment is not detected within 5 minutes:
+- Tell the client the address is still valid
+- Suggest they check they sent the exact amount
+- For XRPL, remind them about the destination tag
+- Offer to check again
 
-If the API returns an error:
+### Step 5 — Error handling
+
+If the tool returns an error:
 - Explain what went wrong in simple terms
-- If a faucet is rate limited, tell the client to try again in a minute
-- If a chain is unsupported, suggest an alternative
+- If no wallet found, suggest the merchant needs to register first
 - Never expose raw stack traces or internal error messages
 
 ## Supported Chains
 
 | Chain | Currency | Network | Explorer |
 |-------|----------|---------|----------|
-| xrpl | XRP | testnet | https://testnet.xrpl.org/transactions/{hash} |
-| solana | SOL/USDC | devnet | https://explorer.solana.com/tx/{hash}?cluster=devnet |
-| base | ETH | sepolia | https://sepolia.basescan.org/tx/{hash} |
-| sui | SUI | testnet | https://suiexplorer.com/txblock/{hash}?network=testnet |
-| ethereum | ETH | testnet | https://sepolia.etherscan.io/tx/{hash} |
+| xrpl | XRP | testnet | https://testnet.xrpl.org |
+| solana | SOL/USDC | devnet | https://explorer.solana.com |
+| base | ETH | sepolia | https://sepolia.basescan.org |
+| sui | SUI | testnet | https://suiexplorer.com |
+| ethereum | ETH | testnet | https://sepolia.etherscan.io |

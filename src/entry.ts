@@ -1,11 +1,14 @@
 /**
  * KlawPay — OpenClaw Plugin Entry Point
  *
- * Registers payment and refund tools that delegate to ClawRevert's API.
+ * Registers payment and refund tools.
+ * Payments use a two-step flow: requestPayment (show address + QR) → verifyPayment (confirm on-chain).
  * Skills are loaded from src/skills/ by the manifest.
  */
 
 import * as clawrevert from "./clawrevert";
+import { requestPayment } from "./tools/requestPayment";
+import { verifyPayment } from "./tools/verifyPayment";
 
 interface ToolParams {
   name: string;
@@ -31,12 +34,15 @@ export default {
     // ── Tool: klawpay_pay ───────────────────────────
     api.registerTool({
       name: "klawpay_pay",
-      description: "Send a crypto payment on a supported blockchain (XRPL, Sui, Solana, Base). Returns the transaction hash and explorer link.",
+      description:
+        "Generate payment instructions for a client. Returns the merchant wallet address, QR code, and destination tag (XRPL). " +
+        "Then automatically polls the blockchain to confirm when payment arrives. " +
+        "Two-step: first shows payment details, then confirms on-chain.",
       parameters: {
         type: "object",
         required: ["amount", "currency", "chain"],
         properties: {
-          amount: { type: "number", description: "Amount to send" },
+          amount: { type: "number", description: "Amount to pay" },
           currency: { type: "string", description: "Token symbol (XRP, ETH, SOL, SUI, USDC)" },
           chain: {
             type: "string",
@@ -44,26 +50,66 @@ export default {
             description: "Blockchain to use",
           },
           clientName: { type: "string", description: "Name of the payer" },
+          merchantId: { type: "string", description: "Merchant ID (from registration)" },
         },
       },
       async execute(_id, params) {
         try {
-          const result = await clawrevert.pay({
+          // Step 1: Generate payment instructions
+          const instructions = await requestPayment({
             amount: params.amount,
             currency: params.currency,
             chain: params.chain,
-            clientName: params.clientName ?? "openclaw-user",
+            clientName: params.clientName ?? "client",
+            merchantId: params.merchantId ?? "default",
           });
-          return text(
-            `Payment confirmed!\n` +
-            `TX: ${result.txHash}\n` +
-            `To: ${result.walletAddress}\n` +
-            `Amount: ${result.amount} ${result.currency} on ${result.chain}\n` +
-            `Explorer: ${result.explorerUrl}\n` +
-            `Network: ${result.network}`
-          );
+
+          const destTagLine = instructions.destinationTag
+            ? `Destination Tag: ${instructions.destinationTag}\n`
+            : "";
+
+          const step1 = [
+            `Payment request created (ID: ${instructions.paymentId})`,
+            ``,
+            `Send exactly ${instructions.amount} ${instructions.currency} to:`,
+            `Address: ${instructions.address}`,
+            destTagLine,
+            `Chain: ${instructions.chain}`,
+            `QR Code: ${instructions.qrDataUrl}`,
+            `Explorer: ${instructions.explorerUrl}`,
+            ``,
+            `Waiting for payment confirmation...`,
+          ].filter(Boolean).join("\n");
+
+          // Step 2: Poll for confirmation (up to 5 minutes)
+          const verification = await verifyPayment({
+            address: instructions.address,
+            amount: instructions.amount,
+            currency: instructions.currency,
+            chain: instructions.chain,
+            destinationTag: instructions.destinationTag,
+            since: instructions.createdAt,
+          });
+
+          if (verification.confirmed) {
+            return text(
+              step1 + "\n\n" +
+              `Payment confirmed!\n` +
+              `TX: ${verification.txHash}\n` +
+              `From: ${verification.from ?? "unknown"}\n` +
+              `Amount received: ${verification.receivedAmount} ${instructions.currency}\n` +
+              `Explorer: ${verification.explorerUrl}`
+            );
+          } else {
+            return text(
+              step1 + "\n\n" +
+              `Payment not yet detected. ${verification.error ?? ""}\n` +
+              `The address remains valid — payment can still be sent.\n` +
+              `Address: ${instructions.address}`
+            );
+          }
         } catch (err: any) {
-          return text(`Payment failed: ${err.message}`);
+          return text(`Payment request failed: ${err.message}`);
         }
       },
     });

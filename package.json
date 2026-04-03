@@ -1,6 +1,6 @@
 {
   "name": "klawpay",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "OpenClaw plugin — accept crypto payments and process refunds via ClawRevert and OWS",
   "module": "src/entry.ts",
   "main": "src/entry.ts",
@@ -36,10 +36,12 @@
   },
   "dependencies": {
     "hono": "^4.12.10",
+    "qrcode": "^1.5.4",
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "@types/qrcode": "^1.5.6"
   },
   "peerDependencies": {
     "typescript": "^5"
