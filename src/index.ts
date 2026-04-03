@@ -28,13 +28,24 @@ app.get("/dashboard/dashboard.js", (c) => {
 // ── Core proxy endpoints ────────────────────────────
 
 app.get("/health", async (c) => {
-  const status = await klawpay.status();
-  return c.json(status);
+  try {
+    const status = await klawpay.status();
+    return c.json(status);
+  } catch {
+    // OWS may not be available on Railway — just check API
+    const apiOk = await fetch(process.env.CLAWREVERT_URL ?? "https://clawrevert-production.up.railway.app" + "/api/health")
+      .then((r) => r.ok).catch(() => false);
+    return c.json({ api: apiOk, wallet: { name: "unavailable (no ows)", chains: [] } });
+  }
 });
 
 app.get("/wallet", async (c) => {
-  const addresses = await klawpay.walletAddresses();
-  return c.json(addresses);
+  try {
+    const addresses = await klawpay.walletAddresses();
+    return c.json(addresses);
+  } catch {
+    return c.json({ error: "OWS not available on this host" }, 503);
+  }
 });
 
 app.post("/pay", async (c) => {
@@ -62,9 +73,13 @@ app.get("/audit", async (c) => {
 });
 
 app.post("/sign", async (c) => {
-  const { chain, message } = await c.req.json();
-  const sig = await klawpay.sign(chain, message);
-  return c.json(JSON.parse(sig));
+  try {
+    const { chain, message } = await c.req.json();
+    const sig = await klawpay.sign(chain, message);
+    return c.json(JSON.parse(sig));
+  } catch {
+    return c.json({ error: "OWS not available on this host" }, 503);
+  }
 });
 
 // ── Merchant registration ───────────────────────────
@@ -96,7 +111,7 @@ app.post("/api/merchants/register", async (c) => {
   const merchantId = crypto.randomUUID().slice(0, 8);
   const walletName = `klawpay-${merchantId}`;
 
-  // Create wallet via OWS CLI
+  // Create wallet via OWS CLI (only works when OWS is installed locally)
   let wallets: Record<string, string> = {};
   try {
     const proc = Bun.spawn(["ows", "wallet", "create", "--name", walletName], {
@@ -117,16 +132,16 @@ app.post("/api/merchants/register", async (c) => {
       if (match) {
         const chainId = match[1];
         const addr = match[2];
-        // Map to friendly names
         if (chainId.startsWith("eip155")) wallets["evm"] = addr;
         else if (chainId.startsWith("solana")) wallets["solana"] = addr;
         else if (chainId.startsWith("sui")) wallets["sui"] = addr;
         else wallets[chainId] = addr;
       }
     }
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "Wallet creation failed";
-    return c.json({ error: msg }, 500);
+  } catch {
+    // OWS not available (e.g. on Railway) — register without wallet creation
+    // Merchant can create wallets locally and link later
+    wallets = { note: "OWS not available on this host. Run locally to create wallets." };
   }
 
   const merchant: MerchantConfig = {
