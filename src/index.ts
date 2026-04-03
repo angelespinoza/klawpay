@@ -13,6 +13,20 @@ const klawpay = new KlawPay();
 
 const app = new Hono();
 
+// ── Static: dashboard ───────────────────────────────
+
+const dashboardHtml = await Bun.file(new URL("../dashboard/index.html", import.meta.url)).text();
+const dashboardJs = await Bun.file(new URL("../dashboard/dashboard.jsx", import.meta.url)).text();
+
+app.get("/dashboard", (c) => c.html(dashboardHtml));
+app.get("/dashboard/dashboard.js", (c) => {
+  return new Response(dashboardJs, {
+    headers: { "Content-Type": "application/javascript; charset=utf-8" },
+  });
+});
+
+// ── Core proxy endpoints ────────────────────────────
+
 app.get("/health", async (c) => {
   const status = await klawpay.status();
   return c.json(status);
@@ -35,6 +49,12 @@ app.post("/refund", async (c) => {
   return c.json(result);
 });
 
+app.get("/api/audit", async (c) => {
+  const limit = Number(c.req.query("limit") ?? 20);
+  const log = await klawpay.audit(limit);
+  return c.json(log);
+});
+
 app.get("/audit", async (c) => {
   const limit = Number(c.req.query("limit") ?? 10);
   const log = await klawpay.audit(limit);
@@ -47,7 +67,98 @@ app.post("/sign", async (c) => {
   return c.json(JSON.parse(sig));
 });
 
-console.log(`🔌 klawpay plugin listening on http://localhost:${port}`);
+// ── Merchant registration ───────────────────────────
+
+interface MerchantConfig {
+  merchantId: string;
+  businessName: string;
+  whatsapp: string;
+  chains: string[];
+  policy: {
+    autoWindow: string;
+    autoUnder: number;
+    maxRefunds: number;
+  };
+  wallets: Record<string, string>;
+  createdAt: string;
+}
+
+const merchants = new Map<string, MerchantConfig>();
+
+app.post("/api/merchants/register", async (c) => {
+  const body = await c.req.json();
+  const { businessName, whatsapp, chains, policy } = body;
+
+  if (!businessName) {
+    return c.json({ error: "businessName is required" }, 400);
+  }
+
+  const merchantId = crypto.randomUUID().slice(0, 8);
+  const walletName = `klawpay-${merchantId}`;
+
+  // Create wallet via OWS CLI
+  let wallets: Record<string, string> = {};
+  try {
+    const proc = Bun.spawn(["ows", "wallet", "create", "--name", walletName], {
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const stdout = await new Response(proc.stdout).text();
+    const stderr = await new Response(proc.stderr).text();
+    const code = await proc.exited;
+
+    if (code !== 0) {
+      throw new Error(stderr.trim() || stdout.trim());
+    }
+
+    // Parse wallet addresses from output
+    for (const line of stdout.split("\n")) {
+      const match = line.match(/^\s+([\w:.\-]+)\s.*→\s+(\S+)/);
+      if (match) {
+        const chainId = match[1];
+        const addr = match[2];
+        // Map to friendly names
+        if (chainId.startsWith("eip155")) wallets["evm"] = addr;
+        else if (chainId.startsWith("solana")) wallets["solana"] = addr;
+        else if (chainId.startsWith("sui")) wallets["sui"] = addr;
+        else wallets[chainId] = addr;
+      }
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Wallet creation failed";
+    return c.json({ error: msg }, 500);
+  }
+
+  const merchant: MerchantConfig = {
+    merchantId,
+    businessName,
+    whatsapp: whatsapp ?? "",
+    chains: chains ?? ["xrpl"],
+    policy: {
+      autoWindow: policy?.autoWindow ?? "72h",
+      autoUnder: policy?.autoUnder ?? 50,
+      maxRefunds: policy?.maxRefunds ?? 3,
+    },
+    wallets,
+    createdAt: new Date().toISOString(),
+  };
+
+  merchants.set(merchantId, merchant);
+
+  return c.json(merchant);
+});
+
+app.get("/api/merchants/:id", (c) => {
+  const id = c.req.param("id");
+  const merchant = merchants.get(id);
+  if (!merchant) return c.json({ error: "Merchant not found" }, 404);
+  return c.json(merchant);
+});
+
+// ── Start ───────────────────────────────────────────
+
+console.log(`🔌 klawpay listening on http://localhost:${port}`);
+console.log(`📊 dashboard at http://localhost:${port}/dashboard`);
 
 export default {
   port,
