@@ -2,7 +2,7 @@
   "id": "klawpay",
   "name": "KlawPay",
   "description": "Accept crypto payments and process refunds across XRPL, Sui, Solana, and EVM chains — powered by ClawRevert and OWS",
-  "version": "1.0.0",
+  "version": "1.0.6",
   "configSchema": {
     "type": "object",
     "additionalProperties": true,
