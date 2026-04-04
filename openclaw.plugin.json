@@ -23,6 +23,22 @@
         "enum": ["en", "es", "pt"],
         "default": "en",
         "description": "Default response language"
+      },
+      "xrplWalletAddress": {
+        "type": "string",
+        "description": "XRPL wallet address to receive payments"
+      },
+      "solanaWalletAddress": {
+        "type": "string",
+        "description": "Solana wallet address to receive payments"
+      },
+      "evmWalletAddress": {
+        "type": "string",
+        "description": "EVM wallet address to receive payments (Ethereum, Base, Arbitrum)"
+      },
+      "suiWalletAddress": {
+        "type": "string",
+        "description": "Sui wallet address to receive payments"
       }
     }
   },
