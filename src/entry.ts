@@ -7,7 +7,7 @@
  */
 
 import * as clawrevert from "./clawrevert";
-import { requestPayment } from "./tools/requestPayment";
+import { requestPayment, type WalletConfig } from "./tools/requestPayment";
 import { verifyPayment } from "./tools/verifyPayment";
 
 interface ToolParams {
@@ -21,6 +21,16 @@ interface PluginApi {
   registerTool(tool: ToolParams, opts?: { optional?: boolean }): void;
 }
 
+interface PluginConfig {
+  clawrevertUrl?: string;
+  defaultChain?: string;
+  language?: string;
+  xrplWalletAddress?: string;
+  solanaWalletAddress?: string;
+  evmWalletAddress?: string;
+  suiWalletAddress?: string;
+}
+
 function text(t: string) {
   return { content: [{ type: "text" as const, text: t }] };
 }
@@ -30,7 +40,14 @@ export default {
   name: "KlawPay",
   description: "Accept crypto payments and process refunds across XRPL, Sui, Solana, and EVM chains",
 
-  register(api: PluginApi) {
+  register(api: PluginApi, config?: PluginConfig) {
+    const wallets: WalletConfig = {
+      xrplWalletAddress: config?.xrplWalletAddress,
+      solanaWalletAddress: config?.solanaWalletAddress,
+      evmWalletAddress: config?.evmWalletAddress,
+      suiWalletAddress: config?.suiWalletAddress,
+    };
+
     // ── Tool: klawpay_pay ───────────────────────────
     api.registerTool({
       name: "klawpay_pay",
@@ -50,19 +67,19 @@ export default {
             description: "Blockchain to use",
           },
           clientName: { type: "string", description: "Name of the payer" },
-          merchantId: { type: "string", description: "Merchant ID (from registration)" },
         },
       },
       async execute(_id, params) {
         try {
-          // Step 1: Generate payment instructions
-          const instructions = await requestPayment({
-            amount: params.amount,
-            currency: params.currency,
-            chain: params.chain,
-            clientName: params.clientName ?? "client",
-            merchantId: params.merchantId ?? "default",
-          });
+          const instructions = await requestPayment(
+            {
+              amount: params.amount,
+              currency: params.currency,
+              chain: params.chain,
+              clientName: params.clientName ?? "client",
+            },
+            wallets,
+          );
 
           const destTagLine = instructions.destinationTag
             ? `Destination Tag: ${instructions.destinationTag}\n`
@@ -81,7 +98,6 @@ export default {
             `Waiting for payment confirmation...`,
           ].filter(Boolean).join("\n");
 
-          // Step 2: Poll for confirmation (up to 5 minutes)
           const verification = await verifyPayment({
             address: instructions.address,
             amount: instructions.amount,
