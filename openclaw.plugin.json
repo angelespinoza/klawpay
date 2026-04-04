@@ -34,10 +34,12 @@
       },
       "evmWalletAddress": {
         "type": "string",
+        "pattern": "^0x[a-fA-F0-9]+$",
         "description": "EVM wallet address to receive payments (Ethereum, Base, Arbitrum)"
       },
       "suiWalletAddress": {
         "type": "string",
+        "pattern": "^0x[a-fA-F0-9]+$",
         "description": "Sui wallet address to receive payments"
       }
     }
